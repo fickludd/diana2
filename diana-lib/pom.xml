@@ -55,11 +55,6 @@
     	<version>1.0.0</version>
     </dependency>
     <dependency>
-    	<groupId>se.lth.immun</groupId>
-    	<artifactId>AnubisReferenceFile</artifactId>
-    	<version>1.6.1</version>
-    </dependency>
-    <dependency>
     	<groupId>se.jt</groupId>
     	<artifactId>Params</artifactId>
     	<version>1.0.0</version>
