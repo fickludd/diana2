@@ -17,7 +17,7 @@ object Diana extends CLIApp {
 		
 		params.t0 = System.currentTimeMillis
 		
-		failOnError(parseArgs(name, version, args, params, List("mzML"), None))
+		failOnError(parseArgs(name, version, args, params, List("traML", "ip"), None))
 		
 		
 		val (outDir, outName) = params.outBase

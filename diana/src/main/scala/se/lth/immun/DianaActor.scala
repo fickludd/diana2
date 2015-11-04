@@ -47,46 +47,51 @@ class DianaActor(params:DianaParams) extends Actor {
 	}
 	
 	def receive = {
-		case Analyze(assays, address) =>
-			assayTodo ++= assays
-			pantherConnection = context.actorOf(ClientInitiator.props(address, self))
-			customer = sender
-			
-		case MSDataProtocolConnected(remote, local) =>
-			processAssays
-			
-		case MSDataReply(msg, nBytes, checkSum, timeTaken, remote) =>
-			println("DIANA| parsed %d bytes in %d ms. CHECKSUM=%d".format(nBytes, timeTaken, checkSum))
-			println("First frag prec mz:"+msg.getTraces.getFragmentList.head.getFragment.getPrecursor)
-			
-			tracingPending.find(_._1 == msg.getId) match {
-				case Some((id, assay)) =>
-					traceTodo += makeAssayTrace(assay, msg)
-				case None =>
-					reportError("Get MSDataReply with id that was not pending. Mysterious!")
+		case x =>
+			//println("DIANA-ACTOR got "+x.toString.take(100))
+			x match {
+				case Analyze(assays, address) =>
+					assayTodo ++= assays
+					context.actorOf(ClientInitiator.props(address, self))
+					customer = sender
+					
+				case MSDataProtocolConnected(remote, local) =>
+					pantherConnection = sender
+					processAssays
+					
+				case MSDataReply(msg, nBytes, checkSum, timeTaken, remote) =>
+					println("DIANA| parsed %d bytes in %d ms. CHECKSUM=%d".format(nBytes, timeTaken, checkSum))
+					println("First frag prec mz:"+msg.getTraces.getFragmentList.head.getFragment.getPrecursor)
+					
+					tracingPending.find(_._1 == msg.getId) match {
+						case Some((id, assay)) =>
+							traceTodo += makeAssayTrace(assay, msg)
+						case None =>
+							reportError("Get MSDataReply with id that was not pending. Mysterious!")
+					}
+					
+					processAssays
+					processTraces
+					
+				case AnalysisComplete(at, atResults) =>
+					println("DIANA| completed analysis of "+at)
+					
+					if (!analysisPending.contains(at))
+						reportError("Got analysis results for assay trace that's not pending. Peculiar!")
+						
+					analysisPending -= at
+					results += AnalysisComplete(at, atResults)
+					
+					processTraces
+					
+				case AnalysisError(at, e) =>
+					reportError("Something went wrong with "+at)
+					reportError(e.getMessage)
+					
+					analysisPending -= at
+					
+					processTraces
 			}
-			
-			processAssays
-			processTraces
-			
-		case AnalysisComplete(at, atResults) =>
-			println("DIANA| completed analysis of "+at)
-			
-			if (!analysisPending.contains(at))
-				reportError("Got analysis results for assay trace that's not pending. Peculiar!")
-				
-			analysisPending -= at
-			results += AnalysisComplete(at, atResults)
-			
-			processTraces
-			
-		case AnalysisError(at, e) =>
-			reportError("Something went wrong with "+at)
-			reportError(e.getMessage)
-			
-			analysisPending -= at
-			
-			processTraces
 	}
 	
 	
@@ -96,6 +101,7 @@ class DianaActor(params:DianaParams) extends Actor {
 		for (assay <- dequeue(params.concurrency - nPending, assayTodo)) {
 			val req = makeRequest(assay)
 			tracingPending += req.getId -> assay
+			//println("DIANA-ACTOR sends: "+req)
 			pantherConnection ! req
 		}
 	}
