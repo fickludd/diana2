@@ -148,29 +148,34 @@ object DianaPeakCandidate {
 				val v = q.dequeue
 				for (i <- 0 until nChannels) {
 					if (i == v.icurve)
-						gv.rValidByChannels(i, i).flag = true
-					else if (!gv.rValidByChannels(v.icurve, i).flag) {
+						gv.valids(i).flag = true
+						//gv.rValidByChannels(i, i).flag = true
+					else {
 						val ui = math.min(i, v.icurve)
 		            	val di = math.max(i, v.icurve)
-		            	val r		= state.ratioGroup.byChannels(ui, di)
-		            	val y		= smooths(i).data.smooth
-		            	val bl		= smooths(i).data.base
-		            	val bL		= bl.length
-		            	val rValid	= gv.rValidByChannels(ui, di)
-		            	for (ir <- istart until iend) {
-		            		if (		r.ratios(ir) < r.expRatio * ub
-		            				&&	r.ratios(ir) > r.expRatio * lb
-		            				&&	v.ok(ir - istart)
-		            				&& 	y(ir) > bl(math.max(0, math.min(bL-1, ir - state.params.binSize / 2)))) {
-		            			gv.valids(i).ok(ir - istart) = true
-		            			rValid.ok(ir - istart) = true
-		            		} else
-		            			rValid.ok(ir - istart) = false
-		            	}
-						gv.rValidByChannels(v.icurve, i).flag = true
-						gv.rValidByChannels(i, v.icurve).flag = true
-						if (gv.rValidByChannels(i, i).flag)
-							q += gv.valids(i)
+		            	if (!gv.rValidByChannels(ui, di).flag) {
+							val r		= state.ratioGroup.byChannels(ui, di)
+			            	val y		= smooths(i).data.smooth
+			            	val bl		= smooths(i).data.base
+			            	val bL		= bl.length
+			            	val rValid	= gv.rValidByChannels(ui, di)
+			            	for (ir <- istart until iend) {
+			            		if (		r.ratios(ir) < r.expRatio * ub
+			            				&&	r.ratios(ir) > r.expRatio * lb
+			            				&&	v.ok(ir - istart)
+			            				&& 	y(ir) > bl(math.max(0, math.min(bL-1, ir - state.params.binSize / 2)))) {
+			            			gv.valids(i).ok(ir - istart) = true
+			            			rValid.ok(ir - istart) = true
+			            		} else
+			            			rValid.ok(ir - istart) = false
+			            	}
+							rValid.flag = true
+							//gv.rValidByChannels(v.icurve, i).flag = true
+							//gv.rValidByChannels(i, v.icurve).flag = true
+							if (gv.valids(i).flag)
+							//if (gv.rValidByChannels(i, i).flag)
+								q += gv.valids(i)
+						}
 					}
 				}
 			}
@@ -259,7 +264,8 @@ object DianaPeakCandidate {
 						else 
 							est.estimates(ifrag)(et)
 					est.correctedAreas(ifrag) += x
-					if (x > est.estimateApex) {
+					est.rawAreas(ifrag) += vals(t0 + nistart + et)
+					if (x >= est.estimateApex) {
 						est.estimateApex = x
 						est.iEstimateApex = t0 + nistart + et
 					}
