@@ -15,7 +15,7 @@ object Diana extends CLIApp {
 
 	def main(args:Array[String]):Unit = {
 		
-		params.t0 = System.currentTimeMillis
+		val t0 = System.currentTimeMillis
 		
 		failOnError(parseArgs(name, version, args, params, List("traML", "ip"), None))
 		
@@ -39,6 +39,9 @@ object Diana extends CLIApp {
 		val scorer = new DiaAssayScorer(params)
 		val results = scorer.analyze(assays)
 		
+		println(" writing result csv to %s...".format(params.outCsv))
+		println("done!")
+		println("  time taken: "+niceTiming(System.currentTimeMillis - t0))
 		Csv.write(params.outCsv, results)
 	}
 	

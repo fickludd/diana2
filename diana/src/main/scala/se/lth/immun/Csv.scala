@@ -6,9 +6,13 @@ import java.io.BufferedWriter
 import java.util.Locale
 
 import se.lth.immun.DianaAnalysisActor.AnalysisComplete
+import se.lth.immun.diana.DianaAnalysis.AssayResults
+import se.lth.immun.diana.DianaAnalysis.MSLevelResults
 
 object Csv {
 
+	val MISSING_STRING = "_"
+	
 	def write(f:File, completes:Seq[AnalysisComplete]) = {
 		
 		val w = new BufferedWriter(new FileWriter(f))
@@ -30,31 +34,35 @@ object Csv {
 				"assayID","protein"))
 				
 		val uk = Locale.UK
+		def format(str:String, a:Any) =
+			str.formatLocal(uk, a)
+		def formatPrecursor(str:String, xOpt:Option[MSLevelResults], f:MSLevelResults => Any) =
+			xOpt.map(x => format(str, f(x))).getOrElse(MISSING_STRING)
 		for {
-			AnalysisComplete(at, results) <- completes
+			AnalysisComplete(at, AssayResults(timings, results)) <- completes
 			r <- results
 		} {
 			row(List(
-					"%10.1f".formatLocal(uk, r.fragment.estimates.rawArea), 
-					"%10.1f".formatLocal(uk, r.fragment.estimates.correctedArea), 
-					"%10.1f".formatLocal(uk, r.precursor.estimates.rawArea), 
-					"%.2e".formatLocal(uk, r.fragment.ratioProbs.rankAll), 
-					"%.2e".formatLocal(uk, r.fragment.ratioProbs.rankPCs), 
-					"%.2e".formatLocal(uk, r.fragment.ratioProbs.markovAll), 
-					"%.2e".formatLocal(uk, r.fragment.ratioProbs.markovPCs), 
-					"%.4f".formatLocal(uk, r.fragment.corrScore), 
-					"%.2e".formatLocal(uk, r.precursor.ratioProbs.rankAll),
-					"%.2e".formatLocal(uk, r.precursor.ratioProbs.rankPCs),
-					"%.2e".formatLocal(uk, r.precursor.ratioProbs.markovAll),
-					"%.2e".formatLocal(uk, r.precursor.ratioProbs.markovPCs),
-					"%.4f".formatLocal(uk, r.precursor.corrScore), 
-					"%.1f".formatLocal(uk, at.times(r.g.istart)), 
-					"%.1f".formatLocal(uk, at.times(r.fragment.estimates.iEstimateApex)), 
-					"%.1f".formatLocal(uk, at.times(r.g.iend)), 
-					"%5.1f".formatLocal(uk, at.assay.expectedRt),
-					"%.2f".formatLocal(uk, at.assay.mz),
+					format("%10.1f", r.fragment.estimates.rawArea), 
+					format("%10.1f", r.fragment.estimates.correctedArea), 
+					formatPrecursor("%10.1f", r.precursor, _.estimates.rawArea), 
+					format("%.2e", r.fragment.ratioProbs.rankAll), 
+					format("%.2e", r.fragment.ratioProbs.rankPCs), 
+					format("%.2e", r.fragment.ratioProbs.markovAll), 
+					format("%.2e", r.fragment.ratioProbs.markovPCs), 
+					format("%.4f", r.fragment.corrScore), 
+					formatPrecursor("%.2e", r.precursor, _.ratioProbs.rankAll),
+					formatPrecursor("%.2e", r.precursor, _.ratioProbs.rankPCs),
+					formatPrecursor("%.2e", r.precursor, _.ratioProbs.markovAll),
+					formatPrecursor("%.2e", r.precursor, _.ratioProbs.markovPCs),
+					formatPrecursor("%.4f", r.precursor, _.corrScore), 
+					format("%.1f", at.times(r.g.istart)), 
+					format("%.1f", at.times(r.fragment.estimates.iEstimateApex)), 
+					format("%.1f", at.times(r.g.iend)), 
+					format("%5.1f", at.assay.expectedRt),
+					format("%.2f", at.assay.mz),
 					at.assay.z,
-					"%.1f".formatLocal(uk, r.fragment.estimates.estimateApex),
+					format("%.1f", r.fragment.estimates.estimateApex),
 					results.length,
 					at.assay.id, 
 					at.assay.protein))

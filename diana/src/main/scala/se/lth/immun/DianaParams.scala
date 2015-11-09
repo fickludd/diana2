@@ -14,6 +14,7 @@ class DianaParams(val name:String, val version:String) extends Params {
 	val extractWidthPPM = 20.0		## "PPM with of chromatogram extraction"
 	
 	val verbose 		= false 	## "increase details in output"
+	val verboseFreq 	= 200		## "output stats every n:th assay"
 	val concurrency 	= 1 		## "the number of assays to analyze in parallel"
 	val profiling 		= false 	## "set to enable CPU profiling"
 	

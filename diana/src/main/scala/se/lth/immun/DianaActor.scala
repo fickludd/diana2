@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 import scala.collection.mutable.HashSet
+import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import se.lth.immun.diana.DianaLib.Assay
 import se.lth.immun.diana.DianaLib.AssayTrace
@@ -18,6 +19,21 @@ import akka.routing.SmallestMailboxPool
 object DianaActor {
 	case class Analyze(assays:Seq[Assay], address:InetSocketAddress)
 	case class Done(results:Seq[DianaAnalysisActor.AnalysisComplete])
+	
+	case class ProcessStats(
+			assayTodo:Int,
+			tracingPending:Int,
+			traceTodo:Int,
+			analysisPending:Int,
+			result:Int,
+			failed:Int
+		) {
+		override def toString = 
+			"%5d %3d %3d %3d %5d %5d".format(assayTodo, tracingPending, traceTodo, analysisPending, result, failed)
+			
+		def done = result + failed
+		def total =	assayTodo + tracingPending + traceTodo + analysisPending + result + failed
+	}
 }
 
 class DianaActor(params:DianaParams) extends Actor {
@@ -27,6 +43,7 @@ class DianaActor(params:DianaParams) extends Actor {
 	import MSDataProtocol._
 	import MSDataProtocolActors._
 	
+	var t0 = 0L
 	var id = 0
 	var customer:ActorRef = _
 	var pantherConnection:ActorRef = _
@@ -37,10 +54,13 @@ class DianaActor(params:DianaParams) extends Actor {
 		)
 		
 	val assayTodo = new Queue[Assay]
-	val tracingPending = new HashSet[(Int, Assay)]
+	val tracingPending = new HashMap[Int, Assay]
 	val traceTodo = new Queue[AssayTrace]
-	val analysisPending = new HashSet[AssayTrace]
+	val analysisPending = new HashMap[AssayTrace, Long]
 	val results = new ArrayBuffer[AnalysisComplete]
+	val failed = new ArrayBuffer[Assay]
+	
+	var headerPrinted = false
 	
 	def reportError(str:String) = {
 		println(str)
@@ -48,9 +68,10 @@ class DianaActor(params:DianaParams) extends Actor {
 	
 	def receive = {
 		case x =>
-			//println("DIANA-ACTOR got "+x.toString.take(100))
+			//println("DIANA-ACTOR got "+x.toString.take(20))
 			x match {
 				case Analyze(assays, address) =>
+					t0 = System.currentTimeMillis
 					assayTodo ++= assays
 					context.actorOf(ClientInitiator.props(address, self))
 					customer = sender
@@ -60,48 +81,80 @@ class DianaActor(params:DianaParams) extends Actor {
 					processAssays
 					
 				case MSDataReply(msg, nBytes, checkSum, timeTaken, remote) =>
-					println("DIANA| parsed %d bytes in %d ms. CHECKSUM=%d".format(nBytes, timeTaken, checkSum))
-					println("First frag prec mz:"+msg.getTraces.getFragmentList.head.getFragment.getPrecursor)
+					//customer ! processStats + " "
+					//customer ! "DIANA| parsed %d bytes in %d ms. CHECKSUM=%d\n".format(nBytes, timeTaken, checkSum)
+					//customer ! "First frag prec mz:"+msg.getTraces.getFragmentList.head.getFragment.getPrecursor
 					
-					tracingPending.find(_._1 == msg.getId) match {
-						case Some((id, assay)) =>
-							traceTodo += makeAssayTrace(assay, msg)
-						case None =>
-							reportError("Get MSDataReply with id that was not pending. Mysterious!")
-					}
+					val id = msg.getId
+					if (tracingPending.contains(id)) {
+						traceTodo += makeAssayTrace(tracingPending(id), msg)
+						tracingPending -= id
+					} else
+						reportError("Got MSDataReply with id that was not pending. Mysterious!")
 					
-					processAssays
-					processTraces
+					process
 					
 				case AnalysisComplete(at, atResults) =>
-					println("DIANA| completed analysis of "+at)
+					//customer ! processStats + " "
 					
-					if (!analysisPending.contains(at))
-						reportError("Got analysis results for assay trace that's not pending. Peculiar!")
-						
-					analysisPending -= at
-					results += AnalysisComplete(at, atResults)
+					if (!headerPrinted) {
+						customer ! "assayTodo tracePending traceTodo analysisPending succeeded failed %s nChannels assayId\n"
+										.format(atResults.timings.map(_._1).mkString(" "))
+						headerPrinted = true
+					}
 					
-					processTraces
+					analysisPending.get(at) match {
+						case Some(localT0) =>
+							analysisPending -= at
+							results += AnalysisComplete(at, atResults)
+							
+							val stats = processStats
+							if (stats.done % params.verboseFreq == 0)
+								customer ! "%s %s %5ds %d %s\n".format(
+										stats, 
+										atResults.timings.map(t => "%4dms".format(t._2)).mkString(" "), 
+										(System.currentTimeMillis - t0) / 1000,
+										at.assay.ms1Channels.length + at.assay.ms2Channels.length,
+										at.assay.id
+									)
+							
+						case None =>
+							failed += at.assay
+							reportError("Got analysis results for assay trace that's not pending. Peculiar!")
+					}
+					
+					process
 					
 				case AnalysisError(at, e) =>
 					reportError("Something went wrong with "+at)
 					reportError(e.getMessage)
 					
 					analysisPending -= at
+					failed += at.assay
 					
-					processTraces
+					processAssays
 			}
 	}
 	
 	
+	def processStats = 
+		ProcessStats(assayTodo.size, tracingPending.size, traceTodo.size, analysisPending.size, results.size, failed.size)
 	
+	
+	
+	def process = {
+		processAssays
+		processTraces
+	}
+		
+		
+		
 	def processAssays = {
-		val nPending = tracingPending.size
-		for (assay <- dequeue(params.concurrency - nPending, assayTodo)) {
+		if (traceTodo.size < params.concurrency && tracingPending.isEmpty && assayTodo.nonEmpty) {
+			val assay = assayTodo.dequeue
 			val req = makeRequest(assay)
 			tracingPending += req.getId -> assay
-			//println("DIANA-ACTOR sends: "+req)
+			//println("DIANA-ACTOR sends for tracing: "+req.toString.take(11))
 			pantherConnection ! req
 		}
 	}
@@ -111,10 +164,12 @@ class DianaActor(params:DianaParams) extends Actor {
 	def processTraces = {
 		val nPending = analysisPending.size
 		for (trace <- dequeue(3 * params.concurrency - nPending, traceTodo)) {
-			analysisPending += trace
+			analysisPending += trace -> System.currentTimeMillis
+			//println("DIANA-ACTOR sends for analysis: "+trace.toString.take(10))
 			analysisRouter ! AnalyzeAssayTrace(trace)
 		}
-		if (analysisPending.size == 0) {
+		if (analysisPending.isEmpty && tracingPending.isEmpty && assayTodo.isEmpty && traceTodo.isEmpty) {
+			//println("DIANA-ACTOR sends for done: "+results.length)
 			customer ! Done(results)
 		}
 	}

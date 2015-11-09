@@ -5,11 +5,11 @@ import akka.actor._
 import se.lth.immun.diana.DianaLibParams
 import se.lth.immun.diana.DianaLib.AssayTrace
 import se.lth.immun.diana.DianaAnalysis
-import se.lth.immun.diana.DianaAnalysis.Result
+import se.lth.immun.diana.DianaAnalysis.AssayResults
 
 object DianaAnalysisActor {
 	case class AnalyzeAssayTrace(at:AssayTrace)
-	case class AnalysisComplete(at:AssayTrace, results:Seq[Result])
+	case class AnalysisComplete(at:AssayTrace, result:AssayResults)
 	case class AnalysisError(at:AssayTrace, e:Exception)
 	
 	def props(params:DianaLibParams) = 

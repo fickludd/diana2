@@ -46,6 +46,7 @@ class DiaAssayScorer(params:DianaParams) {
 		actorInbox.send(dianaActor, DianaActor.Analyze(assays, address))
 		
 		val results = awaitAnalysis
+		actorSystem.shutdown
 		actorSystem.awaitTermination
 		results
 	}
