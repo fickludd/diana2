@@ -75,6 +75,7 @@ class DianaActor(params:DianaParams) extends Actor {
 					assayTodo ++= assays
 					context.actorOf(ClientInitiator.props(address, self))
 					customer = sender
+					customer ! processStats
 					
 				case MSDataProtocolConnected(remote, local) =>
 					pantherConnection = sender
@@ -117,6 +118,8 @@ class DianaActor(params:DianaParams) extends Actor {
 										at.assay.ms1Channels.length + at.assay.ms2Channels.length,
 										at.assay.id
 									)
+									
+							customer ! stats
 							
 						case None =>
 							failed += at.assay
@@ -127,7 +130,7 @@ class DianaActor(params:DianaParams) extends Actor {
 					
 				case AnalysisError(at, e) =>
 					reportError("Something went wrong with "+at)
-					reportError(e.getMessage)
+					reportError(e.getMessage + "\n" + e.getStackTrace.mkString("\n"))
 					
 					analysisPending -= at
 					failed += at.assay

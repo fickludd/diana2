@@ -1,5 +1,6 @@
 package se.lth.immun
 
+import se.jt.CLIBar
 import se.lth.immun.diana.DianaLib._
 import se.lth.immun.diana.DianaAnalysis
 
@@ -14,7 +15,7 @@ class DiaAssayScorer(params:DianaParams) {
 	val actorInbox 		= Inbox.create(actorSystem)
 	
 	val dianaActor		= actorSystem.actorOf(Props(new DianaActor(params)))
-	
+	val cliBar = new CLIBar(50, true)
 	
 	def await[T](pf:PartialFunction[AnyRef, T]):T = {
 		var res:Option[T] = None
@@ -22,6 +23,12 @@ class DiaAssayScorer(params:DianaParams) {
 			try {
 				actorInbox.receive(Duration.create(1, TimeUnit.SECONDS )) match {
 					case str:String => if (params.verbose) print(str)
+					case p:DianaActor.ProcessStats =>
+						if (!params.verbose) {
+							if (!cliBar.start)
+								println(cliBar.reference)
+							print(cliBar.update(p.done, p.total))
+						}
 					case a:AnyRef => 
 						if (pf.isDefinedAt(a)) 
 							res = Some(pf(a))

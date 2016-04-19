@@ -56,9 +56,9 @@ object Csv {
 					formatPrecursor("%.2e", r.precursor, _.ratioProbs.markovAll),
 					formatPrecursor("%.2e", r.precursor, _.ratioProbs.markovPCs),
 					formatPrecursor("%.4f", r.precursor, _.corrScore), 
-					format("%.1f", at.times(r.g.istart)), 
-					format("%.1f", at.times(r.fragment.estimates.iEstimateApex)), 
-					format("%.1f", at.times(r.g.iend)), 
+					format("%.3f", at.times(r.g.istart)), 
+					format("%.3f", at.times(r.fragment.estimates.iEstimateApex)), 
+					format("%.3f", at.times(r.g.iend)), 
 					format("%5.1f", at.assay.expectedRt),
 					format("%.2f", at.assay.mz),
 					at.assay.z,
@@ -67,5 +67,7 @@ object Csv {
 					at.assay.id, 
 					at.assay.protein))
 		}
+		
+		w.close()
 	}
 }
