@@ -44,7 +44,7 @@ object DianaAnalysis {
 	case class AssayResults(timings:ArrayBuffer[(String, Long)], results:Seq[Result])
 	
 	
-	def run(at:AssayTrace, params:DianaLibParams) = {
+	def run(at:AssayTrace, params:DianaLibParams):AssayResults = {
 		
 		val t = new Timer
 		val timings = new ArrayBuffer[(String, Long)]
@@ -77,27 +77,33 @@ object DianaAnalysis {
 							.map(new Result(_, useMS1))
 							
 		timings += "tPeakDetection" -> t.click
-							
-		val fragmentResults = calculateFragmentScores(
-				smooths.filter(_.trace.channel.msLevel == 2), 
-				results,
-				params,
-				timings
-			)
-			
-		timings += "tFragmentScoring" -> t.click
-			
-		val finalResults =
-			if (useMS1) {
-				val ms1Smooths = smooths.filter(_.trace.channel.msLevel == 1)
-				calculatePrecursorScores(ms1Smooths, fragmentResults, params, timings)
-			} else
-				fragmentResults
-				
-		timings += "tPrecursorScoring" -> t.click
-		timings += "total" -> t.total
+		if (results.isEmpty) {
+			timings += "total" -> t.total
+			AssayResults(timings, results)
 		
-		AssayResults(timings, finalResults)
+		} else {
+			
+			val fragmentResults = calculateFragmentScores(
+					smooths.filter(_.trace.channel.msLevel == 2), 
+					results,
+					params,
+					timings
+				)
+				
+			timings += "tFragmentScoring" -> t.click
+				
+			val finalResults =
+				if (useMS1) {
+					val ms1Smooths = smooths.filter(_.trace.channel.msLevel == 1)
+					calculatePrecursorScores(ms1Smooths, fragmentResults, params, timings)
+				} else
+					fragmentResults
+					
+			timings += "tPrecursorScoring" -> t.click
+			timings += "total" -> t.total
+			
+			AssayResults(timings, finalResults)
+		}
 	}
 	
 	
@@ -106,7 +112,17 @@ object DianaAnalysis {
 			results:Seq[Result],
 			params:DianaLibParams,
 			timings:ArrayBuffer[(String, Long)]
-	) = {
+	):Seq[Result] = {
+		if (results.isEmpty) {
+			timings += "tSmoothing" -> 0L
+			timings += "tRatioCalcs" -> 0L 
+			timings += "tValidations" -> 0L
+			timings += "tStatsCalcs" -> 0L
+			timings += "tRatioProbs" -> 0L
+			timings += "tCorrAndEstimate" -> 0L
+			return results
+		}
+		
 		val t = new Timer
 		
 		val reduced 	= Filter.baseLineReduce(smooths.map(_.trace.intensity).toArray)
@@ -168,7 +184,9 @@ object DianaAnalysis {
 			results:Seq[Result],
 			params:DianaLibParams,
 			timings:ArrayBuffer[(String, Long)]
-	) = {
+	):Seq[Result] = {
+		if (results.isEmpty) return results
+		
 		val reduced 	= Filter.baseLineReduce(smooths.map(_.trace.intensity).toArray)
         val filtered 	= zipChannelData(smooths.map(_.trace.channel), reduced).map(_.rawMap(Filter.savitzkyGolay9))
         val ratioGroup 	= computeRatioTraces(filtered)
