@@ -12,13 +12,27 @@ import se.lth.immun.diana.DianaLib.Assay
 import se.lth.immun.diana.DianaLib.AssayTrace
 import se.lth.immun.diana.DianaLib
 import se.lth.immun.diana.DianaAnalysis.Result
+import se.lth.immun.diana.DianaAnalysis.RatioProbs
 import se.lth.immun.protocol.MSDataProtocol
 import se.lth.immun.protocol.MSDataProtocolActors
 import akka.routing.SmallestMailboxPool
 
 object DianaActor {
 	case class Analyze(assays:Seq[Assay], address:InetSocketAddress)
-	case class Done(results:Seq[DianaAnalysisActor.AnalysisComplete])
+	case class Done(results:Seq[AnalysisCompleteSmall])
+	case class AnalysisCompleteSmall(at:Assay, results:Seq[ResultSmall])
+	case class ResultSmall(
+			fragment:MSLevelResultsSmall, 
+			precursor:Option[MSLevelResultsSmall], 
+			times:PeakTimes
+		)
+	case class MSLevelResultsSmall(
+			ratioProbs:RatioProbs,
+			corrScore:Double,
+			estimates:EstimatesSmall
+		)
+	case class EstimatesSmall(rawArea:Double, correctedArea:Double, estimateApex:Double)
+	case class PeakTimes(start:Double, apex:Double, end:Double)
 	
 	case class ProcessStats(
 			assayTodo:Int,
@@ -57,7 +71,7 @@ class DianaActor(params:DianaParams) extends Actor {
 	val tracingPending = new HashMap[Int, Assay]
 	val traceTodo = new Queue[AssayTrace]
 	val analysisPending = new HashMap[AssayTrace, Long]
-	val results = new ArrayBuffer[AnalysisComplete]
+	val results = new ArrayBuffer[AnalysisCompleteSmall]
 	val failed = new ArrayBuffer[Assay]
 	
 	var headerPrinted = false
@@ -95,7 +109,7 @@ class DianaActor(params:DianaParams) extends Actor {
 					
 					process
 					
-				case AnalysisComplete(at, atResults) =>
+				case AnalysisCompleteFull(at, atResults) =>
 					//customer ! processStats + " "
 					
 					if (!headerPrinted) {
@@ -107,7 +121,7 @@ class DianaActor(params:DianaParams) extends Actor {
 					analysisPending.get(at) match {
 						case Some(localT0) =>
 							analysisPending -= at
-							results += AnalysisComplete(at, atResults)
+							results += AnalysisCompleteSmall(at.assay, reduceResults(at, atResults.results))
 							
 							val stats = processStats
 							if (stats.done % params.verboseFreq == 0)
@@ -235,6 +249,35 @@ class DianaActor(params:DianaParams) extends Actor {
 				msg.getTraces.getFragment(0).getTrace.getTimeList.map(_.toDouble).toArray, 
 				precTraces, fragTraces)
 	}
+	
+	
+	def reduceResults(at:AssayTrace, results:Seq[Result]) =
+		for (r <- results) yield 
+			ResultSmall(
+				MSLevelResultsSmall(
+						r.fragment.ratioProbs, 
+						r.fragment.corrScore, 
+						EstimatesSmall(
+							r.fragment.estimates.rawArea,
+							r.fragment.estimates.correctedArea,
+							r.fragment.estimates.estimateApex
+						)
+					),
+				r.precursor.map(p =>
+					MSLevelResultsSmall(
+						p.ratioProbs, 
+						p.corrScore, 
+						EstimatesSmall(
+							p.estimates.rawArea,
+							p.estimates.correctedArea,
+							p.estimates.estimateApex
+						)
+					)),
+				PeakTimes(
+					at.times(r.g.istart), 
+					at.times(r.fragment.estimates.iEstimateApex), 
+					at.times(r.g.iend)
+				))
 	
 	
 	

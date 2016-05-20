@@ -39,10 +39,10 @@ object Diana extends CLIApp {
 		val scorer = new DiaAssayScorer(params)
 		val results = scorer.analyze(assays)
 		
-		println(" writing result csv to %s...".format(params.outCsv))
+		print(" writing result csv to '%s'...".format(params.outCsv))
+		Csv.write(params.outCsv, results)
 		println("done!")
 		println("  time taken: "+niceTiming(System.currentTimeMillis - t0))
-		Csv.write(params.outCsv, results)
 	}
 	
 	def toOutFile(ext:String)(base:(String, String)):File = 

@@ -41,7 +41,7 @@ class DiaAssayScorer(params:DianaParams) {
 	def awaitAnalysis = await({ case DianaActor.Done(results) => results })
 	
 	
-	def analyze(assays:Seq[Assay]):Seq[DianaAnalysisActor.AnalysisComplete] = {
+	def analyze(assays:Seq[Assay]):Seq[DianaActor.AnalysisCompleteSmall] = {
 		val ipRE = """(\d+\.\d+\.\d+\.\d+):(\d+)""".r
 		val localhostRE = """localhost:(\d+)""".r
 		val address = 
